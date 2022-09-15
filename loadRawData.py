@@ -2,30 +2,28 @@ import numpy as np
 import pandas as pd
 from scipy import sparse as ss
 import os
-import loadRawData
 
 dir_KuaiRand = 'D:/Lab/Rethink/Dataset-KuaiRand-Pure/data/'
 dir_YahooR3 = 'D:/Lab/Rethink/Dataset-Yahoo!/R3/'
 dir_coat = 'D:/Lab/Rethink/Dataset-coat/'
 
 
-def load_kuairand(key='is_click',binary=True):
-    if not binary:
-        return loadRawData.load_kuairand()
-    assert key in ['is_click', 'is_like', 'long_view']
+def load_kuairand():
     print('Loading KuaiRand dataset...')
     standard_file = os.path.join(
         dir_KuaiRand, 'log_standard_4_22_to_5_08_pure.csv')
     rand_file = os.path.join(dir_KuaiRand, 'log_random_4_22_to_5_08_pure.csv')
     #检查重复评价
     std_rating = pd.read_csv(standard_file, header=0)[
-        ['user_id', 'video_id', key]].to_numpy()
+        ['user_id', 'video_id', 'play_time_ms', 'duration_ms']].to_numpy()
     rand_rating = pd.read_csv(rand_file, header=0)[
-        ['user_id', 'video_id', key]].to_numpy()
+        ['user_id', 'video_id', 'play_time_ms', 'duration_ms']].to_numpy()
+    #去掉视频长度为0的数据
+    std_rating = std_rating[std_rating[:, 3] != 0]
+    rand_rating = rand_rating[rand_rating[:, 3] != 0]
 
     num_users = max(np.amax(std_rating[:, 0]), np.amax(rand_rating[:, 1]))+1
     num_items = max(np.amax(std_rating[:, 1]), np.amax(rand_rating[:, 1]))+1
-    #print('user num:',num_users,'item num:',num_items)
     #根据user-itemd对判断重复的评分项
     std_ui_pairs = std_rating[:, :2].copy()
     rand_ui_pairs = rand_rating[:, :2].copy()
@@ -45,12 +43,13 @@ def load_kuairand(key='is_click',binary=True):
         indexs.append(np.argwhere(
             (std_rating[:, 0] == u) & (std_rating[:, 1] == i))[0][0])
     std_rating = np.delete(std_rating, indexs, 0)
-    return np.vstack([std_rating, rand_rating])
+    rating = np.vstack([std_rating, rand_rating]).astype('float64')
+    #计算watch_ratio
+    rating[:, 2] /= rating[:, 3]
+    return np.delete(rating, 3, 1)
 
 
-def load_yahoo(binary=True):
-    if not binary:
-        return loadRawData.load_yahoo()
+def load_yahoo():
     print('Loading yahoo dataset...')
     standard_file = os.path.join(
         dir_YahooR3, 'ydata-ymusic-rating-study-v1_0-train.txt')
@@ -64,17 +63,15 @@ def load_yahoo(binary=True):
             u, i, r = line.split()
             if u == '5401':
                 break
-            r = 1 if int(r) >= 4 else 0
-            std_rating.append([int(u)-1, int(i)-1, r])
+            std_rating.append([int(u)-1, int(i)-1, int(r)])
     std_rating = np.array(std_rating)
     with open(rand_file, 'r') as f:
         for line in f.readlines():
             u, i, r = line.split()
-            r = 1 if int(r) >= 4 else 0
-            rand_rating.append([int(u)-1, int(i)-1, r])
+            rand_rating.append([int(u)-1, int(i)-1, int(r)])
     rand_rating = np.array(rand_rating)
-    #print('standard rating:', len(std_rating),
-    #      'random rating:', len(rand_rating))
+    print('standard rating:', len(std_rating),
+          'random rating:', len(rand_rating))
     """
     #检查是否存在重复的评分
     std_mx = ss.csr_matrix((std_rating[:,2],(std_rating[:,0],std_rating[:,1]))).toarray()
@@ -85,16 +82,14 @@ def load_yahoo(binary=True):
     return np.vstack([std_rating, rand_rating])
 
 
-def load_coat(binary=True):
-    if not binary:
-        return loadRawData.load_coat()
+def load_coat():
     print('Loading coat dataset...')
     standard_file = os.path.join(dir_coat, 'train.ascii')
     random_file = os.path.join(dir_coat, 'test.ascii')
     std_rating = np.loadtxt(standard_file)
     rand_rating = np.loadtxt(random_file)
-    #print('standard rating:', (std_rating != 0).sum(),
-    #      'random rating:', (rand_rating != 0).sum())
+    print('standard rating:', (std_rating != 0).sum(),
+          'random rating:', (rand_rating != 0).sum())
     #print(std_rating.shape,rand_rating.shape)
     """
     #检查是否会存在重复评分
@@ -113,20 +108,12 @@ def load_coat(binary=True):
     rate_list = []
     users, items = np.where(rating != 0)
     for x, y in zip(users, items):
-        r = 1 if rating[x, y] >= 4 else 0
-        rate_list.append([x, y, r])
+        rate_list.append([x, y, rating[x, y]])
     data = np.array(rate_list)
-    #print('total rating:', len(data))
+    print('total rating:', len(data))
     return data
 
 
 if __name__ == '__main__':
-    data = load_kuairand(key='is_like')
-    print(len(data))
-    print(np.sum(data[:, 2])/len(data))
-    data = load_coat()
-    print(len(data))
-    print(np.sum(data[:, 2])/len(data))
-    data = load_yahoo()
-    print(len(data))
-    print(np.sum(data[:, 2])/len(data))
+    data = load_kuairand()
+    print(data)
