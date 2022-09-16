@@ -37,13 +37,16 @@ def test_rating(model, data_loader):
     return (loss/len(data_loader.dataset))**0.5
 
 
-def random_rating(data_loader,mean=0.5):
+def random_rating(data_loader,mean=None):
     loss = 0
     for batch in data_loader:
         _, _, ratings = batch[0], batch[1], batch[2]
-        preds = torch.normal(mean,0.01,ratings.shape)
-        preds[preds>1] = 1
-        preds[preds<0] = 0
+        if mean is not None:
+            preds = torch.normal(mean,0.01,ratings.shape)
+            preds[preds>1] = 1
+            preds[preds<0] = 0
+        else:
+            preds = torch.rand_like(ratings)
         loss += torch.sum((preds-ratings)**2).item()
     return (loss/len(data_loader.dataset))**0.5
 
@@ -106,18 +109,16 @@ def visual(train_data,dataset_shape,group_by,model,save_name='visual'):
     test_batch = 1024
     # Analyse exposure - recommendation counts
     # 1. get exposure
-    _,exposures = np.unique(train_data[:,1],return_counts=True)
-    #item_count = np.vstack([items,counts]).T
-    #sort by count
-    #item_count = item_count[item_count[:,1].argsort()]
-    #item_cout = np.resize(item_count,(len(item_count,3)))
-    #group
-    group_by = group_by.copy()
-    group_by.append(np.max(exposures))
+    expo_items,exposures = np.unique(train_data[:,1].astype('int'),return_counts=True)
+    temp = np.zeros(num_item,dtype='int')
+    temp[expo_items] = exposures
+    exposures = temp
+    assert len(exposures) == num_item
     # 2. recommendate for every user, get item counts
     counts = np.zeros(num_item)
     contrast_counts = np.zeros(num_item)
-    train_mx= ss.csr_matrix((train_data[:,2],(train_data[:,0],train_data[:,1])))
+    train_mx= ss.csr_matrix((train_data[:,2],(train_data[:,0].astype('int'),train_data[:,1].astype('int'))))
+    train_mx.resize((num_user,num_item))
     for start in range(0, num_user, test_batch):
         end = start+test_batch if start+test_batch < num_user else num_user-1
         u_idx = torch.arange(start, end)
@@ -130,23 +131,30 @@ def visual(train_data,dataset_shape,group_by,model,save_name='visual'):
         rand_items = np.random.randint(0,num_item,(len(u_idx),5))
         rand_items,rand_counts = np.unique(rand_items.reshape(-1),return_counts=True)
         contrast_counts[rand_items] += rand_counts
+    assert np.sum(counts) == np.sum(contrast_counts)
     # 3. group by exposure
-    #exposures: ([exposure i0,pred counts i0],[...for i1],...)
+    #group
+    group_by = group_by.copy()
+    group_by.append(np.max(exposures)+1)
     group_info = []
     group_item_num = []
     group_rec_count = []
     group_contrast_count = []
     for start,end in zip(group_by[:-1],group_by[1:]):
-        group_info.append(f"[{start}-{end}]")
-        group_idxs = np.where((exposures<=end)&(exposures>start))[0]
+        group_info.append(f"[{start},{end})")
+        group_idxs = np.where((exposures>=start)&(exposures<end))[0]
         g_item_num = len(group_idxs)
         if(g_item_num<10):
-            print('Warning: group[%d,%d] only have %d items!'%(start,end,g_item_num))
+            print('Warning: group[%d,%d) only have %d items!'%(start,end,g_item_num))
+        if(g_item_num==0):
+            group_item_num.append(g_item_num)
+            group_rec_count.append(np.nan)
+            group_contrast_count.append(np.nan)
+            continue
         g_counts = counts[group_idxs]
         group_item_num.append(g_item_num)
         group_rec_count.append(np.sum(g_counts)/g_item_num)
         group_contrast_count.append(np.sum(contrast_counts[group_idxs])/g_item_num)
-    x_axis = np.arange(len(group_by)-1)
     #4. show fig
     sns.set_theme(style="dark")
     group_df = pd.DataFrame([group_info,group_item_num,group_rec_count,group_contrast_count],index=['group','item_num','rec_count','contrast_count']).T

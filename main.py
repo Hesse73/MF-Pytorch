@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="yahoo")  # dataset
     # only useful for KuaiRand
     parser.add_argument("--key", default="is_click")
-    parser.add_argument("--binary",default=False,type=bool)
+    parser.add_argument("--binary",action='store_true') # false if not given
 
     # dims of latent factor
     parser.add_argument("--num", default=50, type=int)
@@ -32,10 +32,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch", default=1024, type=int)  # batch size
     parser.add_argument("--lr", default=1e-3, type=float)  # learning rate
     parser.add_argument("--l2", default=1e-4, type=float)  # L2 regularization
-    parser.add_argument("--verbose", default=False, type=bool)  # args.verbose
-    parser.add_argument("--early_stop",default=True, type=bool)
-    parser.add_argument("--evaluate",default=False,type=bool)
+    parser.add_argument("--verbose", action='store_true')  # false if not given
+    parser.add_argument("--early_stop",action='store_true') # false if not given
+    parser.add_argument("--evaluate",action='store_true') # false if not given
     args = parser.parse_args()
+    #args = parser.parse_args('--dataset=kuairand --num=50 --iter=50 --lr=1e-3 --l2=1e-5 --early_stop --evaluate --binary'.split())
+    #print(args)
 
     if not args.binary:
         save_dir = 'model/raw_%s_num%d_batch%d_lr%1.0E_l2%1.0E' % (
@@ -47,7 +49,7 @@ if __name__ == "__main__":
     #load data
     assert args.dataset in ['kuairand', 'coat', 'yahoo']
     if args.dataset == 'kuairand':
-        data = loadData.load_kuairand(key=args.key,binary=args.binary)
+        data = loadData.load_kuairand(key=args.key,binary=args.binary,simple=False)
         # binary -> need key
         if args.binary:
             save_dir = 'model/%s_%s_num%d_batch%d_lr%1.0E_L2%1.0E' % (
@@ -59,8 +61,8 @@ if __name__ == "__main__":
 
     print()
     #dataset information
-    num_user = np.amax(data[:, 0]) + 1
-    num_item = np.amax(data[:, 1]) + 1
+    num_user = int(np.amax(data[:, 0])) + 1
+    num_item = int(np.amax(data[:, 1])) + 1
     data_shape = (num_user, num_item)
     print("User num:", num_user, "Item num:",
           num_item, "Dataset size:", len(data))
@@ -135,6 +137,8 @@ if __name__ == "__main__":
 
         writer.close()
         #save model
+        if not os.path.exists('model'):
+            os.mkdir('model')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         torch.save(model.state_dict(), os.path.join(
@@ -146,7 +150,8 @@ if __name__ == "__main__":
             save_dir, 'MFmodel-ep%d.ckp' % args.iter)))
     #test & random
     test_rmse = utils.test_rating(model, test_loader)
-    random_rmse = utils.random_rating(test_loader,mean=np.mean(train[:, 2]))
+    #random_rmse = utils.random_rating(test_loader,mean=np.mean(train[:, 2]))
+    random_rmse = utils.random_rating(test_loader)
     print('random rmse:', random_rmse, 'test rmse:', test_rmse)
     
     """
@@ -166,9 +171,10 @@ if __name__ == "__main__":
 
     # group visual
     if args.dataset == 'coat':
-        group_by = [0,20,30,40,50,60,70]
+        group_by = [0,20,30,40,50,60]
     if args.dataset == 'yahoo':
         group_by = [0,100,200,300,400,500,600,700,800]
+        group_by = [0,100,200,300,400,500,800]
     if args.dataset == 'kuairand':
         group_by = [0,100,200,300,400,500,600]
     if args.dataset=='kuairand' and args.binary:

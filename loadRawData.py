@@ -8,7 +8,7 @@ dir_YahooR3 = 'D:/Lab/Rethink/Dataset-Yahoo!/R3/'
 dir_coat = 'D:/Lab/Rethink/Dataset-coat/'
 
 
-def load_kuairand():
+def load_kuairand(simple=False):
     print('Loading KuaiRand dataset...')
     standard_file = os.path.join(
         dir_KuaiRand, 'log_standard_4_22_to_5_08_pure.csv')
@@ -22,6 +22,12 @@ def load_kuairand():
     std_rating = std_rating[std_rating[:, 3] != 0]
     rand_rating = rand_rating[rand_rating[:, 3] != 0]
 
+    if simple:
+        ratings =  np.vstack([std_rating,rand_rating]).astype('float64')
+        #get watch_ratio
+        ratings[:,2]/=ratings[:,3]
+        #remove duration
+        return ratings[:,:3]
     num_users = max(np.amax(std_rating[:, 0]), np.amax(rand_rating[:, 1]))+1
     num_items = max(np.amax(std_rating[:, 1]), np.amax(rand_rating[:, 1]))+1
     #根据user-itemd对判断重复的评分项
@@ -46,7 +52,7 @@ def load_kuairand():
     rating = np.vstack([std_rating, rand_rating]).astype('float64')
     #计算watch_ratio
     rating[:, 2] /= rating[:, 3]
-    return np.delete(rating, 3, 1)
+    return rating[:,:3]
 
 
 def load_yahoo():

@@ -9,7 +9,7 @@ dir_YahooR3 = 'D:/Lab/Rethink/Dataset-Yahoo!/R3/'
 dir_coat = 'D:/Lab/Rethink/Dataset-coat/'
 
 
-def load_kuairand(key='is_click',binary=True):
+def load_kuairand(key='is_click',binary=True,simple=False):
     if not binary:
         return loadRawData.load_kuairand()
     assert key in ['is_click', 'is_like', 'long_view']
@@ -22,6 +22,10 @@ def load_kuairand(key='is_click',binary=True):
         ['user_id', 'video_id', key]].to_numpy()
     rand_rating = pd.read_csv(rand_file, header=0)[
         ['user_id', 'video_id', key]].to_numpy()
+
+    
+    if simple:
+        return np.vstack([std_rating,rand_rating])
 
     num_users = max(np.amax(std_rating[:, 0]), np.amax(rand_rating[:, 1]))+1
     num_items = max(np.amax(std_rating[:, 1]), np.amax(rand_rating[:, 1]))+1

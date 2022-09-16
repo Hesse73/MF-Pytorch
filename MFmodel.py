@@ -50,5 +50,5 @@ class MFModel(torch.nn.Module):
         pred_mx += user_bias + item_bias + self.mean
         if data_mx is not None:
             # set pred of (u,v) in train_data with value 0 (thus not picked)
-            pred_mx = torch.mul(pred_mx,torch.tensor(data_mx!=1))
+            pred_mx = torch.mul(pred_mx,torch.tensor(data_mx==0))
         return torch.topk(pred_mx, k)
