@@ -2,10 +2,12 @@ import numpy as np
 import pandas as pd
 from scipy import sparse as ss
 import os
+import config
 
-dir_KuaiRand = 'D:/Lab/Rethink/Dataset-KuaiRand-Pure/data/'
-dir_YahooR3 = 'D:/Lab/Rethink/Dataset-Yahoo!/R3/'
-dir_coat = 'D:/Lab/Rethink/Dataset-coat/'
+dir_KuaiRand = config.dir_KuaiRand
+dir_YahooR3 = config.dir_YahooR3
+dir_coat = config.dir_coat
+
 
 
 def load_kuairand(simple=False):
