@@ -34,21 +34,44 @@ class MFModel(torch.nn.Module):
 
         return pred
 
-    def topk(self, u_idx, k, data_mx = None):
+    def topk(self, u_idx, k, mask_mx=None):
         # u_idx: torch.tensor(n)
         # k: item num
-        # data_mx: train_data matrix (nxV), 1 for exits in dataset, 0 for not
+        # mask_mx: train_data matrix (nxV), 1 for exits in dataset, 0 for not
         # return top-k ratings, top-k indexs
         # both shape (len(u_idx),k)
         # Note that items in train data will not be recommended again
-        user_mx = self.u_mx(u_idx)
-        item_mx = self.v_mx(torch.arange(self.n_item))
-        pred_mx = torch.matmul(user_mx, item_mx.T)
-        user_bias = torch.mul(self.u_bias(u_idx), torch.ones_like(pred_mx))
-        item_bias = torch.mul(self.v_bias(torch.arange(
-            self.n_item)).reshape(-1), torch.ones_like(pred_mx))
-        pred_mx += user_bias + item_bias + self.mean
-        if data_mx is not None:
-            # set pred of (u,v) in train_data with value 0 (thus not picked)
-            pred_mx = torch.mul(pred_mx,torch.tensor(data_mx==0))
-        return torch.topk(pred_mx, k)
+        with torch.no_grad():
+            user_mx = self.u_mx(u_idx)
+            item_mx = self.v_mx(torch.arange(self.n_item))
+            pred_mx = torch.matmul(user_mx, item_mx.T)
+            user_bias = torch.mul(self.u_bias(u_idx), torch.ones_like(pred_mx))
+            item_bias = torch.mul(self.v_bias(torch.arange(
+                self.n_item)).reshape(-1), torch.ones_like(pred_mx))
+            pred_mx += user_bias + item_bias + self.mean
+            if mask_mx is not None:
+                #set pred value with -1 where u-i exists in mask_mx
+                #pred_mx[mask_mx!=0] = -1
+                pred_mx = torch.where(torch.tensor(
+                    mask_mx == 0), pred_mx, -torch.ones_like(pred_mx))
+            #if mask_mx is not None:
+            #    # set pred of (u,v) in train_data with value 0 (thus not picked)
+            #    pred_mx = torch.mul(pred_mx,torch.tensor(mask_mx==0))
+            return torch.topk(pred_mx, k)
+
+    def get_pred_mx(self, u_idx, mask_mx=None,data_mx=None):
+        import numpy as np
+        with torch.no_grad():
+            user_mx = self.u_mx(u_idx)
+            item_mx = self.v_mx(torch.arange(self.n_item))
+            pred_mx = torch.matmul(user_mx, item_mx.T)
+            user_bias = torch.mul(self.u_bias(u_idx), torch.ones_like(pred_mx))
+            item_bias = torch.mul(self.v_bias(torch.arange(
+                self.n_item)).reshape(-1), torch.ones_like(pred_mx))
+            pred_mx += user_bias + item_bias + self.mean
+            pred_mx = pred_mx.numpy()
+            if mask_mx is not None:
+                #replace with data_mx
+                #pred_mx[mask_mx!=0] = data_mx
+                pred_mx = np.where(mask_mx == 0, pred_mx, data_mx)
+            return pred_mx

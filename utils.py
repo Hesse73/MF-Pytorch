@@ -37,20 +37,20 @@ def test_rating(model, data_loader):
     return (loss/len(data_loader.dataset))**0.5
 
 
-def random_rating(data_loader,mean=None):
+def random_rating(data_loader, mean=None):
     loss = 0
     for batch in data_loader:
         _, _, ratings = batch[0], batch[1], batch[2]
         if mean is not None:
-            preds = torch.normal(mean,0.01,ratings.shape)
-            preds[preds>1] = 1
-            preds[preds<0] = 0
+            preds = torch.normal(mean, 0.01, ratings.shape)
+            preds[preds > 1] = 1
+            preds[preds < 0] = 0
         else:
             preds = torch.rand_like(ratings)
         loss += torch.sum((preds-ratings)**2).item()
     return (loss/len(data_loader.dataset))**0.5
 
-
+"""
 def NDCG_atK(model, data, k=5, batch_size=1024):
     model.eval()
 
@@ -102,34 +102,38 @@ def random_NDCG_atK(model, data, k=5, batch_size=1024):
         result += torch.nansum(dcg/idcg).item()
 
     return result/n_user
+"""
 
-def visual(train_data,dataset_shape,group_by,model,save_name='visual'):
+def visual(train_data, dataset_shape, group_by, model, save_name='visual'):
 
-    num_user,num_item = dataset_shape
+    num_user, num_item = dataset_shape
     test_batch = 1024
     # Analyse exposure - recommendation counts
     # 1. get exposure
-    expo_items,exposures = np.unique(train_data[:,1].astype('int'),return_counts=True)
-    temp = np.zeros(num_item,dtype='int')
+    expo_items, exposures = np.unique(
+        train_data[:, 1].astype('int'), return_counts=True)
+    temp = np.zeros(num_item, dtype='int')
     temp[expo_items] = exposures
     exposures = temp
     assert len(exposures) == num_item
     # 2. recommendate for every user, get item counts
     counts = np.zeros(num_item)
     contrast_counts = np.zeros(num_item)
-    train_mx= ss.csr_matrix((train_data[:,2],(train_data[:,0].astype('int'),train_data[:,1].astype('int'))))
-    train_mx.resize((num_user,num_item))
+    mask_mx = ss.csr_matrix((np.ones(len(train_data)), (train_data[:, 0].astype(
+        'int'), train_data[:, 1].astype('int'))))
+    mask_mx.resize((num_user, num_item))
     for start in range(0, num_user, test_batch):
-        end = start+test_batch if start+test_batch < num_user else num_user-1
+        end = start+test_batch if start+test_batch < num_user else num_user
         u_idx = torch.arange(start, end)
-        data_mx = train_mx[u_idx].toarray()
-        _,pred_items = model.topk(u_idx,5,data_mx)
-        pred_items,pred_counts = torch.unique(pred_items.reshape(-1),return_counts=True)
-        pred_items,pred_counts = pred_items.numpy(),pred_counts.numpy()
+        _, pred_items = model.topk(u_idx, 5, mask_mx[u_idx].toarray())
+        pred_items, pred_counts = torch.unique(
+            pred_items.reshape(-1), return_counts=True)
+        pred_items, pred_counts = pred_items.numpy(), pred_counts.numpy()
         counts[pred_items] += pred_counts
         # random for contrast
-        rand_items = np.random.randint(0,num_item,(len(u_idx),5))
-        rand_items,rand_counts = np.unique(rand_items.reshape(-1),return_counts=True)
+        rand_items = np.random.randint(0, num_item, (len(u_idx), 5))
+        rand_items, rand_counts = np.unique(
+            rand_items.reshape(-1), return_counts=True)
         contrast_counts[rand_items] += rand_counts
     assert np.sum(counts) == np.sum(contrast_counts)
     # 3. group by exposure
@@ -140,30 +144,37 @@ def visual(train_data,dataset_shape,group_by,model,save_name='visual'):
     group_item_num = []
     group_rec_count = []
     group_contrast_count = []
-    for start,end in zip(group_by[:-1],group_by[1:]):
+    for start, end in zip(group_by[:-1], group_by[1:]):
         group_info.append(f"[{start},{end})")
-        group_idxs = np.where((exposures>=start)&(exposures<end))[0]
+        group_idxs = np.where((exposures >= start) & (exposures < end))[0]
         g_item_num = len(group_idxs)
-        if(g_item_num<10):
-            print('Warning: group[%d,%d) only have %d items!'%(start,end,g_item_num))
-        if(g_item_num==0):
+        if (g_item_num < 10):
+            print('Warning: group[%d,%d) only have %d items!' %
+                  (start, end, g_item_num))
+        if (g_item_num == 0):
             group_item_num.append(g_item_num)
             group_rec_count.append(np.nan)
             group_contrast_count.append(np.nan)
             continue
         g_counts = counts[group_idxs]
+        if np.sum(g_counts) == 0:
+            print('Warning: no recommendation in this group!')
         group_item_num.append(g_item_num)
         group_rec_count.append(np.sum(g_counts)/g_item_num)
-        group_contrast_count.append(np.sum(contrast_counts[group_idxs])/g_item_num)
+        group_contrast_count.append(
+            np.sum(contrast_counts[group_idxs])/g_item_num)
     #4. show fig
     sns.set_theme(style="dark")
-    group_df = pd.DataFrame([group_info,group_item_num,group_rec_count,group_contrast_count],index=['group','item_num','rec_count','contrast_count']).T
+    group_df = pd.DataFrame([group_info, group_item_num, group_rec_count, group_contrast_count], index=[
+                            'group', 'item_num', 'rec_count', 'contrast_count']).T
     fig = plt.figure()
-    sns.barplot(data=group_df,x='group',y='item_num')
-    ax1=plt.gca()
+    sns.barplot(data=group_df, x='group', y='item_num')
+    ax1 = plt.gca()
     ax2 = ax1.twinx()
-    sns.lineplot(data=group_df,x='group',y='rec_count',ax=ax2,label='MF rec')
-    sns.lineplot(data=group_df,x='group',y='contrast_count',ax=ax2,label='Random')
+    sns.lineplot(data=group_df, x='group',
+                 y='rec_count', ax=ax2, label='MF rec')
+    sns.lineplot(data=group_df, x='group',
+                 y='contrast_count', ax=ax2, label='Random')
     plt.legend()
     plt.show()
     if not os.path.exists('pics'):
